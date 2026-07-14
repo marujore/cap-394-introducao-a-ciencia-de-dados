@@ -1,0 +1,1156 @@
+{
+ "cells": [
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "8102e266-85a7-42a5-ba99-505618f509c9",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "import itertools\n",
+    "from pathlib import Path\n",
+    "\n",
+    "import geopandas as gpd\n",
+    "import matplotlib.pyplot as plt\n",
+    "import numpy as np\n",
+    "import pandas as pd\n",
+    "import rasterio\n",
+    "import seaborn as sns\n",
+    "from pyproj import datadir\n",
+    "\n",
+    "# datadir.set_data_dir(\"/usr/share/proj\")"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "2e060b86-a23b-4352-8157-e70bd8515ed4",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "import pandas as pd\n",
+    "\n",
+    "df = pd.DataFrame({\n",
+    "    \"Outlook\": [\n",
+    "        \"Sunny\", \"Sunny\", \"Overcast\", \"Rainy\", \"Rainy\", \"Rainy\",\n",
+    "        \"Overcast\", \"Sunny\", \"Sunny\", \"Rainy\", \"Sunny\",\n",
+    "        \"Overcast\", \"Overcast\", \"Rainy\"\n",
+    "    ],\n",
+    "    \"Temperature\": [\n",
+    "        \"hot\", \"hot\", \"hot\", \"mild\", \"cool\", \"cool\",\n",
+    "        \"cool\", \"mild\", \"cool\", \"mild\", \"mild\",\n",
+    "        \"mild\", \"hot\", \"mild\"\n",
+    "    ],\n",
+    "    \"Humidity\": [\n",
+    "        \"high\", \"high\", \"high\", \"high\", \"normal\", \"normal\",\n",
+    "        \"normal\", \"high\", \"normal\", \"normal\", \"normal\",\n",
+    "        \"high\", \"normal\", \"high\"\n",
+    "    ],\n",
+    "    \"Windy\": [\n",
+    "        False, True, False, False, False, True,\n",
+    "        True, False, False, False, True,\n",
+    "        True, False, True\n",
+    "    ],\n",
+    "    \"Play\": [\n",
+    "        \"no\", \"no\", \"yes\", \"yes\", \"yes\", \"no\",\n",
+    "        \"yes\", \"no\", \"yes\", \"yes\", \"yes\",\n",
+    "        \"yes\", \"yes\", \"no\"\n",
+    "    ]\n",
+    "})\n",
+    "\n",
+    "df"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "ff195b8d-5c5f-45f8-aca7-443e061567c6",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "features = [\"Outlook\", \"Temperature\", \"Humidity\", \"Windy\"]\n",
+    "\n",
+    "fig, axes = plt.subplots(2, 2, figsize=(12, 8))\n",
+    "\n",
+    "for ax, feature in zip(axes.ravel(), features):\n",
+    "\n",
+    "    sns.countplot(\n",
+    "        data=df,\n",
+    "        x=feature,\n",
+    "        ax=ax\n",
+    "    )\n",
+    "\n",
+    "    ax.set_title(feature)\n",
+    "    ax.set_ylabel(\"Count\")\n",
+    "\n",
+    "plt.tight_layout()\n",
+    "plt.show()"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "d099009d-5cac-4462-be8f-e4406c258f72",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "features = [\"Outlook\", \"Temperature\", \"Humidity\", \"Windy\"]\n",
+    "\n",
+    "fig, axes = plt.subplots(2, 2, figsize=(12, 8))\n",
+    "\n",
+    "for ax, feature in zip(axes.ravel(), features):\n",
+    "\n",
+    "    sns.countplot(\n",
+    "        data=df,\n",
+    "        x=feature,\n",
+    "        hue=\"Play\",\n",
+    "        ax=ax\n",
+    "    )\n",
+    "\n",
+    "    ax.set_title(feature)\n",
+    "    ax.set_ylabel(\"Count\")\n",
+    "\n",
+    "plt.tight_layout()\n",
+    "plt.show()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "c08b1831-180c-445f-afe4-0c7c83202e70",
+   "metadata": {},
+   "source": [
+    "# Clouds"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "ae6d81f2-de6f-462a-97a2-c0b21142c2ca",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# https://www.scielo.br/j/bcg/a/jGFBvBWTVz6L56Yb73DQKFr/?format=html&lang=pt\n",
+    "\n",
+    "# https://data.inpe.br/stac/browser/collections/CB4A-MUX-L4-DN-1/items/CBERS_4A_MUX_20260108_202_142_L4?.language=en\n",
+    "# https://data.inpe.br/stac/browser/collections/CB4A-MUX-L4-SR-1/items/CBERS_4A_MUX_20260108_202_142_L4?.language=en"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "dd1a9e53-b1fe-4eb2-998a-4b5f776726ff",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "gpkg = \"/home/jovyan/Disciplinas/Data_Science/09_dt/samples.gpkg\"\n",
+    "\n",
+    "bands = {\n",
+    "    \"blue\": \"/home/jovyan/Disciplinas/Data_Science/09_dt/imgs/CBERS_4A_MUX_20260108_202_142_L4_BAND5_GRID_SURFACE.tif\",\n",
+    "    \"green\": \"/home/jovyan/Disciplinas/Data_Science/09_dt/imgs/CBERS_4A_MUX_20260108_202_142_L4_BAND6_GRID_SURFACE.tif\",\n",
+    "    \"red\": \"/home/jovyan/Disciplinas/Data_Science/09_dt/imgs/CBERS_4A_MUX_20260108_202_142_L4_BAND7_GRID_SURFACE.tif\",\n",
+    "    \"nir\": \"/home/jovyan/Disciplinas/Data_Science/09_dt/imgs/CBERS_4A_MUX_20260108_202_142_L4_BAND8_GRID_SURFACE.tif\",\n",
+    "}\n",
+    "\n",
+    "# bands = {\n",
+    "#     \"blue\": \"/home/jovyan/Disciplinas/Data_Science/09_dt/imgs/CBERS_4A_MUX_20260108_202_142_L4_BAND5.tif\",\n",
+    "#     \"green\": \"/home/jovyan/Disciplinas/Data_Science/09_dt/imgs/CBERS_4A_MUX_20260108_202_142_L4_BAND6.tif\",\n",
+    "#     \"red\": \"/home/jovyan/Disciplinas/Data_Science/09_dt/imgs/CBERS_4A_MUX_20260108_202_142_L4_BAND7.tif\",\n",
+    "#     \"nir\": \"/home/jovyan/Disciplinas/Data_Science/09_dt/imgs/CBERS_4A_MUX_20260108_202_142_L4_BAND8.tif\",\n",
+    "# }\n",
+    "\n",
+    "classes = \"class\""
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "8ace3d37-ba52-4bfd-b06c-91fcec52c182",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "gdf = gpd.read_file(gpkg)\n",
+    "\n",
+    "if gdf.crs is None:\n",
+    "    raise ValueError(\"no CRS defined.\")\n",
+    "\n",
+    "# Keep original lon lat\n",
+    "gdf[\"lon\"] = gdf.geometry.x\n",
+    "gdf[\"lat\"] = gdf.geometry.y\n",
+    "\n",
+    "with rasterio.open(next(iter(bands.values()))) as src:\n",
+    "    raster_crs = src.crs\n",
+    "\n",
+    "if gdf.crs != raster_crs:\n",
+    "    gdf = gdf.to_crs(raster_crs)\n",
+    "\n",
+    "coords = [(geom.x, geom.y) for geom in gdf.geometry]\n",
+    "\n",
+    "for name, file in bands.items():\n",
+    "    with rasterio.open(file) as src:\n",
+    "        valores = []\n",
+    "        for valor in src.sample(coords):\n",
+    "            v = valor[0]\n",
+    "            if src.nodata is not None and v == src.nodata:\n",
+    "                valores.append(None)\n",
+    "            else:\n",
+    "                valores.append(v)\n",
+    "        gdf[name] = valores\n",
+    "\n",
+    "colunas = [\n",
+    "    \"lon\",\n",
+    "    \"lat\",\n",
+    "    classes,\n",
+    "    \"blue\",\n",
+    "    \"green\",\n",
+    "    \"red\",\n",
+    "    \"nir\",\n",
+    "]\n",
+    "\n",
+    "df = pd.DataFrame(gdf[colunas])\n",
+    "\n",
+    "df"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "1b082425-2039-4ab1-b163-604f672644c9",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "df.shape"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "bbddf72c-1109-48df-9dd5-9f68705a56dc",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "df.info()"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "dd21dfde-bbd2-4b38-9079-0482c93c214f",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "df.isnull().sum()"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "dcae8f43-d932-4b52-9f81-c837e7da283c",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "fig, axes = plt.subplots(2, 2, figsize=(12, 8))\n",
+    "\n",
+    "for ax, band in zip(axes.ravel(), bands):\n",
+    "\n",
+    "    sns.histplot(\n",
+    "        data=df,\n",
+    "        x=band,\n",
+    "        bins=50,\n",
+    "        edgecolor=\"black\",\n",
+    "        ax=ax\n",
+    "    )\n",
+    "\n",
+    "    ax.set_title(f\"{band.capitalize()} Band\")\n",
+    "    ax.set_xlabel(\"Pixel Value\")\n",
+    "    ax.set_ylabel(\"Frequency\")\n",
+    "\n",
+    "plt.tight_layout()\n",
+    "plt.show()"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "2f214772-0b1e-4488-b41f-81d5a0febf8f",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "palette = {\n",
+    "    \"cloud\": \"white\",\n",
+    "    \"shadow\": \"black\",\n",
+    "    \"clear\": \"yellow\"\n",
+    "}\n",
+    "\n",
+    "fig, axes = plt.subplots(2, 2, figsize=(12, 8))\n",
+    "\n",
+    "for ax, band in zip(axes.ravel(), bands):\n",
+    "\n",
+    "    sns.histplot(\n",
+    "        data=df,\n",
+    "        x=band,\n",
+    "        hue=\"class\",\n",
+    "        palette=palette,\n",
+    "        bins=50,\n",
+    "        stat=\"count\",\n",
+    "        common_norm=False,\n",
+    "        alpha=0.6,\n",
+    "        edgecolor=\"black\",\n",
+    "        ax=ax\n",
+    "    )\n",
+    "\n",
+    "    ax.set_title(f\"{band.capitalize()} Band\")\n",
+    "    ax.set_xlabel(\"Reflectance\")\n",
+    "    ax.set_ylabel(\"Count\")\n",
+    "\n",
+    "plt.tight_layout()\n",
+    "plt.show()"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "414d5c8e-5413-46ee-80bb-5ed0f85673a9",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "plt.figure(figsize=(6,4))\n",
+    "\n",
+    "sns.scatterplot( #regplot\n",
+    "    data=df,\n",
+    "    x='red',\n",
+    "    y='nir',\n",
+    "    # scatter_kws={'alpha':0.7},\n",
+    "    # line_kws={'color':'red'}\n",
+    ")\n",
+    "\n",
+    "plt.title('Scatterplot')\n",
+    "plt.tight_layout()\n",
+    "plt.show()"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "0c7b91c5-7ba3-4d7b-a1d7-08023320b1fb",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "sns.scatterplot(\n",
+    "    data=df,\n",
+    "    x=\"red\",\n",
+    "    y=\"nir\",\n",
+    "    hue=\"class\",\n",
+    "    palette=palette,\n",
+    "    edgecolor=\"gray\",\n",
+    "    linewidth=0.3,\n",
+    "    s=40\n",
+    ")\n",
+    "\n",
+    "plt.title(\"Red vs NIR\")\n",
+    "plt.legend(title=\"Class\")\n",
+    "plt.tight_layout()\n",
+    "plt.show()"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "99d56737-133f-4ab8-9607-de21a8ddfb4a",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "pairs = list(itertools.combinations(bands, 2))\n",
+    "\n",
+    "fig, axes = plt.subplots(2, 3, figsize=(15, 9))\n",
+    "\n",
+    "for ax, (x_band, y_band) in zip(axes.ravel(), pairs):\n",
+    "    sns.scatterplot(\n",
+    "        data=df,\n",
+    "        x=x_band,\n",
+    "        y=y_band,\n",
+    "        hue=\"class\",\n",
+    "        palette=palette,\n",
+    "        edgecolor=\"gray\",\n",
+    "        linewidth=0.3,\n",
+    "        s=25,\n",
+    "        legend=False,\n",
+    "        ax=ax\n",
+    "    )\n",
+    "\n",
+    "    ax.set_title(f\"{x_band.capitalize()} vs {y_band.capitalize()}\")\n",
+    "\n",
+    "handles, labels = axes[0, 0].get_legend_handles_labels()\n",
+    "fig.legend(handles, labels, title=\"Class\", loc=\"upper right\")\n",
+    "\n",
+    "plt.tight_layout()\n",
+    "plt.show()"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "aed501fa-b4b5-4dda-b0ea-7aa834e0cb90",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "from sklearn.model_selection import train_test_split\n",
+    "\n",
+    "from sklearn.linear_model import LogisticRegression\n",
+    "from sklearn.tree import DecisionTreeClassifier\n",
+    "from sklearn.ensemble import RandomForestClassifier\n",
+    "\n",
+    "from sklearn.metrics import (\n",
+    "    accuracy_score,\n",
+    "    classification_report,\n",
+    "    confusion_matrix\n",
+    ")"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "fced74bb-d748-4506-b799-4e326bc71a4c",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "import random\n",
+    "\n",
+    "num = random.randint(1, 10)\n",
+    "num"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "f7840285-ae02-4ed1-99e2-87d402ede771",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "random.seed(42)\n",
+    "\n",
+    "num = random.randint(1, 10)\n",
+    "num"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "921e250c-8d9f-46a2-8648-030c5df51760",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "df"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "54267a3b-6330-4f1a-8f12-a7bd71203be7",
+   "metadata": {},
+   "source": [
+    "# Data partition"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "4f1f5562-9369-4641-8949-1468aea7d069",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "train = df[:41]\n",
+    "test = df[41:]"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "9d0064bf-4b08-4ec4-b469-5a2293d3e0d8",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "train"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "023fe8fe-501d-454a-a14e-2fb3e1acbc4a",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "test"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "16943f0d-3dea-4e32-a527-f007244de1c2",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "x = df.drop(columns='class')\n",
+    "\n",
+    "y = df['class']\n",
+    "\n",
+    "x_train, x_val, y_train, y_val = train_test_split(\n",
+    "    x,\n",
+    "    y,\n",
+    "    test_size=0.30,\n",
+    "    random_state=42,\n",
+    "    shuffle=True\n",
+    ")\n",
+    "\n",
+    "print(f\"Amostras de treino: {len(x_train)}\")\n",
+    "print(f\"Amostras de validação: {len(x_val)}\")"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "81ba67c4-5f1a-403b-931d-cdfc106cf3c8",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "x_train"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "761bf81b-0be5-41e3-b2b3-7860a7d0537d",
+   "metadata": {
+    "scrolled": true
+   },
+   "outputs": [],
+   "source": [
+    "x_val"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "b1b4f65c-5c70-447d-8363-d44de501d7d2",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "y_train"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "50a3864b-4c0e-4d40-a0ba-a6bf162638f6",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "y_val"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "68b9b5b2-02e5-416d-bb4e-69eabdb6f738",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "print(y_train.value_counts())\n",
+    "print(y_val.value_counts())"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "1a59d9e5-d981-4ea4-bf0e-1419b5640aad",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "x = df.drop(columns='class')\n",
+    "\n",
+    "y = df['class']\n",
+    "\n",
+    "x_train, x_val, y_train, y_val = train_test_split(\n",
+    "    x,\n",
+    "    y,\n",
+    "    test_size=0.30,\n",
+    "    random_state=42,\n",
+    "    stratify=y\n",
+    ")\n",
+    "\n",
+    "print(f\"training samples: {len(x_train)}\")\n",
+    "print(f\"validation samples: {len(x_val)}\")"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "2a389e71-bb7d-4786-b9d0-e72e78be9d3c",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "x_train"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "8e4067a1-ea5d-4332-815c-e1ac17c37244",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "x_val"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "395d89fb-e315-4bdb-a761-9c6792fff988",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "y_train"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "9db90df2-c12b-4294-9553-5289418c965b",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "y_val"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "36ff21ef-c9e8-44fa-aba5-07e2805975dc",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "print(y_train.value_counts())\n",
+    "print(y_val.value_counts())"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "73631976-4b5e-4d45-af53-878b09fe679b",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "from sklearn.model_selection import StratifiedShuffleSplit"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "0ab34992-7320-41d1-bad9-3f0ead418270",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "skf = StratifiedShuffleSplit(n_splits=2, train_size=0.8, random_state=42)\n",
+    "\n",
+    "for i, (train_idx, val_idx) in enumerate(skf.split(df, df[\"class\"]), start=1):\n",
+    "    print(f\"Split {i}\")\n",
+    "    print(f\"N training samples: {len(train_idx)}\")\n",
+    "    print(f\"N validation samples: {len(val_idx)}\")\n",
+    "\n",
+    "    print(\"\\training class distribution:\")\n",
+    "    print(df.iloc[train_idx][\"class\"].value_counts())\n",
+    "\n",
+    "    print(\"\\nvalidation class distribution:\")\n",
+    "    print(df.iloc[val_idx][\"class\"].value_counts())\n",
+    "\n",
+    "    print()"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "e76ca603-96ef-4b64-a5bf-1908feefc007",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "from sklearn.model_selection import StratifiedKFold, KFold\n",
+    "from sklearn.metrics import accuracy_score"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "344944f4-591d-4163-8ade-c8dbec4fe198",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "kf = KFold(\n",
+    "    n_splits=5,\n",
+    "    shuffle=True,\n",
+    "    random_state=42\n",
+    ")\n",
+    "\n",
+    "model = RandomForestClassifier(\n",
+    "    random_state=42\n",
+    ")\n",
+    "\n",
+    "scores = []\n",
+    "\n",
+    "for fold, (train_idx, val_idx) in enumerate(kf.split(x), start=1):\n",
+    "\n",
+    "    x_train = x.iloc[train_idx]\n",
+    "    x_val = x.iloc[val_idx]\n",
+    "\n",
+    "    y_train = y.iloc[train_idx]\n",
+    "    y_val = y.iloc[val_idx]\n",
+    "\n",
+    "    model.fit(x_train, y_train)\n",
+    "\n",
+    "    y_pred = model.predict(x_val)\n",
+    "\n",
+    "    acc = accuracy_score(y_val, y_pred)\n",
+    "\n",
+    "    scores.append(acc)\n",
+    "\n",
+    "    print(f\"Fold {fold}\")\n",
+    "    print(f\"Acurácia: {acc:.3f}\")\n",
+    "    print()\n",
+    "\n",
+    "print(f\"Average: {np.mean(scores):.3f}\")\n",
+    "print(f\"Std: {np.std(scores):.3f}\")"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "98d09b20-2ef2-45c6-8a66-b01f55a0dacf",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "from sklearn.model_selection import cross_val_score\n",
+    "\n",
+    "rf = RandomForestClassifier(random_state=42)\n",
+    "\n",
+    "scores = cross_val_score(\n",
+    "    rf,\n",
+    "    x,\n",
+    "    y,\n",
+    "    cv=5,\n",
+    "    scoring=\"accuracy\"\n",
+    ")\n",
+    "\n",
+    "print(scores)\n",
+    "print(\"Mean:\", scores.mean())"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "1a8ad27f-0e62-448a-821f-c2d01bf6ceaa",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "cv = StratifiedKFold(\n",
+    "    n_splits=5,\n",
+    "    shuffle=True,\n",
+    "    random_state=42\n",
+    ")\n",
+    "\n",
+    "scores = cross_val_score(\n",
+    "    rf,\n",
+    "    x,\n",
+    "    y,\n",
+    "    cv=cv,\n",
+    "    scoring=\"accuracy\"\n",
+    ")\n",
+    "\n",
+    "print(scores)\n",
+    "print(\"Mean:\", scores.mean())"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "d1516d11-a5b0-42a5-a358-620ad6809008",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "rf.get_params()"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "431759fb-4e90-4428-8e34-e1945b0cce58",
+   "metadata": {
+    "scrolled": true
+   },
+   "outputs": [],
+   "source": [
+    "rf.fit(x, y)\n",
+    "\n",
+    "print(rf.estimators_)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "cded137a-52b1-4247-98f8-1124a2d78429",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "rf.fit(x, y)\n",
+    "\n",
+    "print(rf.estimators_)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "586b8b92-4c17-42ab-b76a-4e9ca7431be4",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "tree1 = rf.estimators_[0]\n",
+    "\n",
+    "print(tree1)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "3ec2028a-ccd9-4016-ba87-0b333aba74b1",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "tree1.get_depth()"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "ff8fdb69-b62b-49fc-9ad1-6a1e8415f7df",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "tree1.get_n_leaves()"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "56327bcd-51af-48e5-96c8-fcaf6152e965",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "from sklearn.tree import export_text\n",
+    "\n",
+    "print(\n",
+    "    export_text(\n",
+    "        tree1,\n",
+    "        feature_names=list(x.columns)\n",
+    "    )\n",
+    ")"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "faf0f198-b89d-4600-a28c-8284f6e5bf55",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "rf.estimators_samples_[0]"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "e5ef3cee-a1b0-4f4e-b525-5216ce71eea6",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "x = df.drop(columns=['class', \"lat\", \"lon\"])\n",
+    "x"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "176f9c51-e722-4cfa-8346-867abd754084",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "cv = StratifiedKFold(\n",
+    "    n_splits=5,\n",
+    "    shuffle=True,\n",
+    "    random_state=42\n",
+    ")\n",
+    "\n",
+    "scores = cross_val_score(\n",
+    "    rf,\n",
+    "    x,\n",
+    "    y,\n",
+    "    cv=cv,\n",
+    "    scoring=\"accuracy\"\n",
+    ")\n",
+    "\n",
+    "print(scores)\n",
+    "print(\"Mean:\", scores.mean())"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "53289d80-0b14-436f-9839-c2c6b6c243f0",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "x"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "62f34848-182c-4a03-9017-3b8d9dfc3e05",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "rf.fit(x, y)\n",
+    "\n",
+    "tree1 = rf.estimators_[0]\n",
+    "\n",
+    "print(\n",
+    "    export_text(\n",
+    "        tree1,\n",
+    "        feature_names=list(x.columns)\n",
+    "    )\n",
+    ")\n",
+    "\n",
+    "scores = cross_val_score(\n",
+    "    rf,\n",
+    "    x,\n",
+    "    y,\n",
+    "    cv=cv,\n",
+    "    scoring=\"accuracy\"\n",
+    ")\n",
+    "\n",
+    "print(scores)\n",
+    "print(\"Mean:\", scores.mean())"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "06f1aa97-df33-48f7-ac7b-a43acc57b6f5",
+   "metadata": {},
+   "source": [
+    "# Decision Tree"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "324dd2dc-95d2-48dc-b8b5-670d08605034",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "from sklearn.tree import DecisionTreeClassifier\n",
+    "\n",
+    "dt = DecisionTreeClassifier(\n",
+    "    criterion=\"gini\",\n",
+    "    max_depth=None,\n",
+    "    random_state=42\n",
+    ")\n",
+    "\n",
+    "cv = StratifiedKFold(\n",
+    "    n_splits=5,\n",
+    "    shuffle=True,\n",
+    "    random_state=42\n",
+    ")\n",
+    "\n",
+    "scores = cross_val_score(\n",
+    "    dt,\n",
+    "    x,\n",
+    "    y,\n",
+    "    cv=cv,\n",
+    "    scoring=\"accuracy\"\n",
+    ")\n",
+    "\n",
+    "print(scores)\n",
+    "print(\"Mean:\", scores.mean())"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "87770a90-5b2a-443a-95fc-6eebb80b7f8b",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "dt.fit(x, y)\n",
+    "print(dt.get_depth())"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "5f9fb5b2-a54b-4f84-ba64-eb9e40139096",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "print(dt.get_n_leaves())"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "7f353806-0677-4a93-b930-795d61d0be52",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "for feature in dt.tree_.feature:\n",
+    "    if feature >= 0:\n",
+    "        print(x.columns[feature])"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "e9e8c763-bd23-49ec-b771-70f39a85e132",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "rules = export_text(\n",
+    "    dt,\n",
+    "    feature_names=list(x.columns)\n",
+    ")\n",
+    "\n",
+    "print(rules)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "50db6b52-5101-4b2f-ad49-b49f0f22dd9b",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "importance = pd.DataFrame({\n",
+    "    \"band\": x.columns,\n",
+    "    \"importance\": dt.feature_importances_\n",
+    "})\n",
+    "\n",
+    "importance.sort_values(\n",
+    "    \"importance\",\n",
+    "    ascending=False\n",
+    ")"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "41850003-d408-4b3b-b945-125f7624ac01",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "df[\"ndvi\"] = (df[\"nir\"] - df[\"red\"]) / (df[\"nir\"] + df[\"red\"])\n",
+    "df[\"M\"] = (\n",
+    "    0.25 * df[\"blue\"] +\n",
+    "    0.375 * df[\"green\"] +\n",
+    "    0.375 * df[\"red\"]\n",
+    ")\n",
+    "df[\"wi\"] = (\n",
+    "    abs(df[\"blue\"] - df[\"M\"]) / df[\"M\"] +\n",
+    "    abs(df[\"green\"] - df[\"M\"]) / df[\"M\"] +\n",
+    "    abs(df[\"red\"] - df[\"M\"]) / df[\"M\"]\n",
+    ")\n",
+    "df[\"hot\"] = (\n",
+    "    df[\"blue\"] -\n",
+    "    0.45 * df[\"red\"] -\n",
+    "    0.08\n",
+    ")\n",
+    "\n",
+    "# df[\"d\"] = df[\"B2\"] < x and df[\"B4\"] < y\n",
+    "# df[\"w\"] = df[\"ndvi\"] < ndvi_clean and df[\"B4\"] < rhoclean\n",
+    "# df[\"diff\"] = (df[\"NIR\"] - df[\"NIR\"])\n",
+    "\n",
+    "x = df.drop(columns=['class', \"lat\", \"lon\"])\n",
+    "x"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "828f84f0-068f-4e26-8e1f-fa3118a680f3",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "dt = DecisionTreeClassifier(\n",
+    "    criterion=\"gini\",\n",
+    "    max_depth=None,\n",
+    "    random_state=42\n",
+    ")\n",
+    "\n",
+    "cv = StratifiedKFold(\n",
+    "    n_splits=5,\n",
+    "    shuffle=True,\n",
+    "    random_state=42\n",
+    ")\n",
+    "\n",
+    "scores = cross_val_score(\n",
+    "    dt,\n",
+    "    x,\n",
+    "    y,\n",
+    "    cv=cv,\n",
+    "    scoring=\"accuracy\"\n",
+    ")\n",
+    "\n",
+    "print(scores)\n",
+    "print(\"Mean:\", scores.mean())\n",
+    "\n",
+    "dt.fit(x, y)\n",
+    "print(dt.get_depth())\n",
+    "\n",
+    "print(dt.get_n_leaves())\n",
+    "\n",
+    "for feature in dt.tree_.feature:\n",
+    "    if feature >= 0:\n",
+    "        print(x.columns[feature])\n",
+    "\n",
+    "rules = export_text(\n",
+    "    dt,\n",
+    "    feature_names=list(x.columns)\n",
+    ")\n",
+    "\n",
+    "print(rules)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "6f7255db-54f1-4aa1-8e06-04604298f941",
+   "metadata": {},
+   "outputs": [],
+   "source": []
+  }
+ ],
+ "metadata": {
+  "kernelspec": {
+   "display_name": "Python (Geospatial)",
+   "language": "python",
+   "name": "geospatial"
+  },
+  "language_info": {
+   "codemirror_mode": {
+    "name": "ipython",
+    "version": 3
+   },
+   "file_extension": ".py",
+   "mimetype": "text/x-python",
+   "name": "python",
+   "nbconvert_exporter": "python",
+   "pygments_lexer": "ipython3",
+   "version": "3.11.13"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 5
+}
